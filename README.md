@@ -4,7 +4,7 @@
 
 PumpScreen helps you inspect Solana wallets, understand their Pump.fun trading behavior, find active traders behind newly minted tokens, and keep a watchlist of wallets worth monitoring.
 
-![PumpScreen dashboard](https://placehold.co/1400x760/08090d/10b981?text=PumpScreen+Dashboard)
+![PumpScreen dashboard](ss-dashboard.png)
 
 > **Important:** This is an analytics and research tool, not financial advice. Meme coins are highly volatile. Never connect a wallet or risk funds based only on a score, badge, or historical result.
 
