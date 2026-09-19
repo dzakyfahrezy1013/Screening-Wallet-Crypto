@@ -108,7 +108,7 @@ class SolanaRpcClient {
   async getTransaction(signature) {
     return this.callRpc('getTransaction', [
       signature,
-      { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }
+      { encoding: 'jsonParsed', maxSupportedTransactionVersion: 1 }
     ], { useCache: true });
   }
 

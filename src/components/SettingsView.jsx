@@ -86,10 +86,18 @@ export default function SettingsView({
             </div>
           </div>
           <span className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 ${
-            rpcStatus?.status === 'connected' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400'
+            rpcStatus?.status === 'connected'
+              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+              : rpcStatus?.status?.startsWith('error')
+              ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+              : 'bg-amber-500/10 text-amber-400'
           }`}>
             <span className="w-2 h-2 rounded-full bg-current animate-pulse" />
-            <span>{rpcStatus?.latencyMs && rpcStatus.latencyMs > 0 ? `${rpcStatus.latencyMs}ms` : 'Connected'}</span>
+            <span>
+              {rpcStatus?.status === 'connected'
+                ? `${rpcStatus.latencyMs}ms`
+                : rpcStatus?.status?.startsWith('error') ? 'Error' : 'Checking'}
+            </span>
           </span>
         </div>
 

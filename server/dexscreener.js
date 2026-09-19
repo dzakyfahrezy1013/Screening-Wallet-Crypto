@@ -94,13 +94,16 @@ class DexScreenerService {
 
   async getTrendingPumpTokens(limit = 20) {
     try {
-      // Query DexScreener search for 'pump'
-      const res = await fetch('https://api.dexscreener.com/latest/dex/search?q=pump');
+      // DexScreener's pumpfun search returns current Pump.fun and PumpSwap pairs.
+      const res = await fetch('https://api.dexscreener.com/latest/dex/search?q=pumpfun');
       if (!res.ok) return [];
       const data = await res.json();
 
       const pairs = (data.pairs || [])
-        .filter(p => p.chainId === 'solana' && (p.dexId === 'pumpfun' || p.baseToken?.address?.endsWith('pump')))
+        .filter(p =>
+          p.chainId === 'solana'
+          && ['pumpfun', 'pumpswap'].includes(p.dexId)
+        )
         .slice(0, limit)
         .map(p => ({
           mint: p.baseToken.address,

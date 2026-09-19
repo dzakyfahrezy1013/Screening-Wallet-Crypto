@@ -3,10 +3,12 @@ import { Trophy, Star, Crosshair, ExternalLink, Copy, Check, Sparkles, TrendingU
 
 export default function Leaderboard({
   leaderboardData = [],
+  isLoading = false,
   onScreenWallet,
   watchlist = [],
   onToggleWatchlist
 }) {
+
   const [copiedAddress, setCopiedAddress] = useState(null);
   const [filterMode, setFilterMode] = useState('pnl'); // 'pnl' | 'winrate'
 
@@ -76,7 +78,14 @@ export default function Leaderboard({
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5 font-mono">
-              {sortedData.length === 0 && (
+              {isLoading && (
+                <tr>
+                  <td colSpan="7" className="py-12 text-center text-slate-400 font-sans">
+                    Loading live wallet history...
+                  </td>
+                </tr>
+              )}
+              {!isLoading && sortedData.length === 0 && (
                 <tr>
                   <td colSpan="7" className="py-12 text-center text-slate-400 font-sans">
                     No live wallet history discovered yet. Open Live Mints or inspect a token's traders to populate this board.

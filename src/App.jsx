@@ -23,6 +23,8 @@ export default function App() {
   const [trendingTokens, setTrendingTokens] = useState([]);
   const [isLoadingTrending, setIsLoadingTrending] = useState(false);
   const [leaderboardData, setLeaderboardData] = useState([]);
+  const [isLoadingLeaderboard, setIsLoadingLeaderboard] = useState(false);
+
 
   const [selectedToken, setSelectedToken] = useState(null);
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
@@ -46,16 +48,20 @@ export default function App() {
 
   useEffect(() => {
     if (activeTab !== 'leaderboard') return;
+    setIsLoadingLeaderboard(true);
     fetch('/api/leaderboard')
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data)) setLeaderboardData(data);
       })
-      .catch(err => console.error('Error refreshing live leaderboard:', err));
+      .catch(err => console.error('Error refreshing live leaderboard:', err))
+      .finally(() => setIsLoadingLeaderboard(false));
   }, [activeTab]);
+
 
   const fetchInitialData = async () => {
     setIsRefreshing(true);
+    setIsLoadingTrending(true);
     try {
       const savedRpcUrl = localStorage.getItem('pumpfun_rpc_url');
       if (savedRpcUrl) {
@@ -88,14 +94,17 @@ export default function App() {
       console.error('Error loading live market data:', err);
     } finally {
       setIsRefreshing(false);
+      setIsLoadingTrending(false);
     }
 
+    setIsLoadingLeaderboard(true);
     fetch('/api/leaderboard')
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data)) setLeaderboardData(data);
       })
-      .catch(err => console.error('Error loading live leaderboard:', err));
+      .catch(err => console.error('Error loading live leaderboard:', err))
+      .finally(() => setIsLoadingLeaderboard(false));
   };
 
   const screenWalletAddress = async (address) => {
@@ -213,6 +222,7 @@ export default function App() {
         {activeTab === 'leaderboard' && (
           <Leaderboard
             leaderboardData={leaderboardData}
+            isLoading={isLoadingLeaderboard}
             onScreenWallet={(address) => {
               setActiveTab('screener');
               screenWalletAddress(address);
