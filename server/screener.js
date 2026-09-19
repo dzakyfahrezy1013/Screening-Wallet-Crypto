@@ -2,6 +2,39 @@ import { solanaRpc } from './solanaRpc.js';
 import { parseTransaction } from './parser.js';
 import { dexScreener } from './dexscreener.js';
 
+function buildEmptyProfile(cleanAddress, solBalance, solPriceUsd, alias, badge) {
+  return {
+    address: cleanAddress,
+    alias,
+    solBalance,
+    solPriceUsd,
+    summary: {
+      totalTrades: 0,
+      uniqueTokensTraded: 0,
+      profitableTrades: 0,
+      unprofitableTrades: 0,
+      winRate: 0,
+      totalRealizedPnlSol: 0,
+      totalRealizedPnlUsd: 0,
+      totalUnrealizedPnlSol: 0,
+      totalUnrealizedPnlUsd: 0,
+      totalVolumeSol: 0,
+      profitFactor: 0,
+      avgHoldDurationSec: 0,
+      avgTradeSizeSol: 0,
+      smartScore: null,
+      safetyLevel: 'NO_HISTORY',
+      tokensCreated: 0,
+      rugPullsDetected: 0
+    },
+    badges: [badge],
+    biggestWin: null,
+    biggestLoss: null,
+    tokensTraded: [],
+    recentTransactions: []
+  };
+}
+
 export async function screenWallet(walletAddress, options = {}) {
   const { limit = 60 } = options;
 
@@ -33,46 +66,27 @@ export async function screenWallet(walletAddress, options = {}) {
 
 
   if (signatures.length === 0) {
-    // Return empty or new wallet state
-    return {
-      address: cleanAddress,
-      alias: 'New or Inactive Wallet',
-      solBalance,
-      solPriceUsd,
-      summary: {
-        totalTrades: 0,
-        uniqueTokensTraded: 0,
-        profitableTrades: 0,
-        unprofitableTrades: 0,
-        winRate: 0,
-        totalRealizedPnlSol: 0,
-        totalRealizedPnlUsd: 0,
-        totalUnrealizedPnlSol: 0,
-        totalUnrealizedPnlUsd: 0,
-        totalVolumeSol: 0,
-        profitFactor: 0,
-        avgHoldDurationSec: 0,
-        avgTradeSizeSol: 0,
-        smartScore: null,
-        safetyLevel: 'NO_HISTORY',
-        tokensCreated: 0,
-        rugPullsDetected: 0
-      },
-      badges: [
-        { id: 'no_history', label: 'No On-chain History', color: 'gray', icon: 'Sparkles', desc: 'No recent pump.fun transactions found for this wallet' }
-      ],
-    };
+    return buildEmptyProfile(cleanAddress, solBalance, solPriceUsd, 'New or Inactive Wallet', {
+      id: 'no_history', label: 'No On-chain History', color: 'gray', icon: 'Sparkles', desc: 'No transactions found for this wallet'
+    });
   }
 
   // Fetch parsed transactions
   const validSignatures = signatures.map(s => s.signature).filter(Boolean);
   const rawTransactions = await solanaRpc.getMultipleTransactions(validSignatures, 6);
 
-  // Parse transactions with our pump.fun parser
+  // Parse transactions, keeping only activity on the Pump bonding curve or PumpSwap AMM
+  // (excludes Raydium/Jupiter/other-DEX trades and unrelated SPL transfers)
   const parsedTxs = rawTransactions
     .map(tx => parseTransaction(tx, cleanAddress))
-    .filter(Boolean)
+    .filter(tx => tx && tx.hasPumpFun)
     .sort((a, b) => b.blockTime - a.blockTime);
+
+  if (parsedTxs.length === 0) {
+    return buildEmptyProfile(cleanAddress, solBalance, solPriceUsd, 'No Pump.fun Activity', {
+      id: 'no_history', label: 'No On-chain History', color: 'gray', icon: 'Sparkles', desc: 'No recent pump.fun transactions found for this wallet'
+    });
+  }
 
   // Group by token mint
   const tokenMap = new Map();

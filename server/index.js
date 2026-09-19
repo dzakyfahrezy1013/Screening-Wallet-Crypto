@@ -6,6 +6,7 @@ import { CONFIG } from './config.js';
 import { solanaRpc } from './solanaRpc.js';
 import { dexScreener } from './dexscreener.js';
 import { screenWallet } from './screener.js';
+import { parseTransaction } from './parser.js';
 import {
   cacheWalletProfile,
   getCachedWalletProfile,
@@ -205,7 +206,7 @@ app.get('/api/token/:mint/traders', async (req, res) => {
 
     for (const tx of txs) {
       const parsed = parseTransaction(tx);
-      if (!parsed || !parsed.userWallet || !['buy', 'sell'].includes(parsed.action)) continue;
+      if (!parsed || !parsed.hasPumpFun || !parsed.userWallet || !['buy', 'sell'].includes(parsed.action)) continue;
 
       const wallet = parsed.userWallet;
       registerLiveWallet(wallet, 'token-trader', {

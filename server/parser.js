@@ -1,4 +1,4 @@
-import { PUMP_FUN_PROGRAM_ID, ROUTER_PROGRAMS } from './config.js';
+import { PUMP_FUN_PROGRAM_ID, PUMPSWAP_PROGRAM_ID, ROUTER_PROGRAMS } from './config.js';
 
 export function parseTransaction(tx, targetWallet = null) {
   if (!tx || !tx.meta || !tx.transaction) return null;
@@ -16,8 +16,8 @@ export function parseTransaction(tx, targetWallet = null) {
   const userWallet = targetWallet || feePayer;
   const userIndex = accountPubkeys.indexOf(userWallet);
 
-  // Check if pump.fun is involved
-  const hasPumpFun = accountPubkeys.includes(PUMP_FUN_PROGRAM_ID);
+  // Only wallet activity that touches the Pump bonding curve or its PumpSwap AMM counts as pump.fun data
+  const hasPumpFun = accountPubkeys.includes(PUMP_FUN_PROGRAM_ID) || accountPubkeys.includes(PUMPSWAP_PROGRAM_ID);
   const logMessages = tx.meta.logMessages || [];
   const logsString = logMessages.join('\n');
 
