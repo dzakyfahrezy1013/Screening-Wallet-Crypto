@@ -53,9 +53,13 @@ export default function Header({
           </div>
 
           {/* Live WS Pulse Pill */}
-          <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-300 font-mono">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-            <span className="font-semibold">Pump WS: Live</span>
+          <div className={`hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-mono ${
+            rpcStatus?.wsConnected
+              ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-300'
+              : 'bg-amber-500/10 border border-amber-500/20 text-amber-300'
+          }`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${rpcStatus?.wsConnected ? 'bg-emerald-400 animate-ping' : 'bg-amber-400'}`} />
+            <span className="font-semibold">Pump WS: {rpcStatus?.wsConnected ? 'Live' : 'Offline'}</span>
           </div>
 
           {/* Currency Toggle */}

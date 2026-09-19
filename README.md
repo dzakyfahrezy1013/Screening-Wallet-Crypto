@@ -6,6 +6,8 @@ PumpScreen helps you inspect Solana wallets, understand their Pump.fun trading b
 
 ![PumpScreen dashboard](ss-dashboard.png)
 
+> The screenshot is a UI preview. Runtime wallet, token, price, and leaderboard data are fetched from live services; no demo profiles are loaded.
+
 > **Important:** This is an analytics and research tool, not financial advice. Meme coins are highly volatile. Never connect a wallet or risk funds based only on a score, badge, or historical result.
 
 ---
@@ -17,20 +19,20 @@ PumpScreen helps you inspect Solana wallets, understand their Pump.fun trading b
 | **Wallet Screener** | Win rate, realized/unrealized PnL, profit factor, volume, hold time, traded tokens, and recent swaps. |
 | **Live Mints** | Newly created Pump.fun tokens from the PumpPortal WebSocket stream. No manual refresh required. |
 | **Find Whales** | Inspect recent buyers and sellers for a token, then screen any wallet in one click. |
-| **Smart Money Leaderboard** | Compare tracked profiles by PnL, win rate, profit factor, and Smart Score. |
+| **Live Wallet Leaderboard** | Rank wallets discovered from live mint events and on-chain token-trader scans. |
 | **Wallet Watchlist** | Save wallets locally in the browser and export the list as JSON. |
 | **Custom RPC** | Use a Helius, QuickNode, Alchemy, Shyft, or other Solana RPC endpoint for higher limits. |
 | **SOL/USD display** | Toggle between SOL and USD using a live SOL price from DexScreener. |
 
-### Live data vs sample data
+### Real-data contract
 
-The application has two clearly different data paths:
+PumpScreen is now real-data-only at runtime:
 
-- **Live wallet scans:** custom wallet addresses are read from Solana Mainnet RPC and parsed from on-chain transactions.
-- **Live market data:** token prices and market metrics come from DexScreener.
-- **Live mint feed:** new token creation events come from PumpPortal WebSocket and appear in **Trending Pump Coins → Live Mints (Sub-sec)**.
-- **Preset profiles:** the four Quick Presets are intentionally curated demo profiles so a new user can explore the interface immediately. They are labeled **Preset Sample**.
-- Use **Scan Live On-Chain (Solana RPC)** on a preset profile to bypass its demo profile and query the real wallet address.
+- **Wallet scans:** every requested wallet is read from Solana Mainnet RPC and parsed from fresh transaction signatures.
+- **Market data:** token pairs, prices, volume, and SOL/USD conversion come from DexScreener.
+- **Live mint feed:** new token creation events come directly from the PumpPortal WebSocket and are forwarded to the browser over SSE.
+- **Live wallet leaderboard:** wallets are discovered from PumpPortal creator events and on-chain token-trader inspections, then ranked only after real transaction history is available.
+- **No demo profiles:** the app does not ship or auto-load simulated wallet performance. Empty states are intentional when live history has not been discovered yet.
 
 ---
 
@@ -114,13 +116,12 @@ src/
   App.jsx                    App state, routing between dashboard tabs, watchlist
   components/                Screener, live feed, leaderboard, settings, tables
 server/
-  index.js                   Express API and PumpPortal live stream
+  index.js                   Express API, live stream, and wallet discovery
   screener.js                Wallet metrics, PnL aggregation, badges, scoring
   parser.js                  Pump.fun transaction parsing
+  liveWallets.js             In-memory registry/cache of observed live wallets
   solanaRpc.js               RPC fallback pool, retry, cache, throttling
   dexscreener.js             SOL price and token market data
-  sampleWallets.js           Curated demo profiles for onboarding
-```
 
 ### Wallet metrics
 
@@ -145,21 +146,19 @@ The API runs on `http://localhost:4000` by default.
 | --- | --- |
 | `GET /api/health` | API, RPC, SOL price, and PumpPortal WebSocket status. |
 | `GET /api/sol-price` | Current SOL/USD price from DexScreener. |
-| `GET /api/wallet/:address` | Screen a wallet. Add `?forceLive=true` to bypass demo profiles. |
-| `GET /api/wallet-samples` | List the curated onboarding profiles. |
+| `GET /api/wallet/:address` | Screen a wallet from fresh Solana Mainnet RPC data. |
 | `GET /api/tokens/trending?limit=20` | Fetch trending Solana/Pump.fun pairs. |
 | `GET /api/tokens/live-feed` | Read the current live-mint buffer. |
 | `GET /api/tokens/live-sse` | Server-Sent Events stream for live mints. |
 | `GET /api/token/:mint` | Fetch token market data. |
 | `GET /api/token/:mint/traders` | Extract recent traders from token transactions. |
-| `GET /api/leaderboard` | Read the tracked Smart Money leaderboard. |
+| `GET /api/leaderboard` | Rank wallets discovered from live events and on-chain trader scans. |
 | `GET /api/settings/rpc` | Check active RPC and latency. |
 | `POST /api/settings/rpc` | Set a custom RPC with `{ "rpcUrl": "https://..." }`. |
 
 Example live wallet request:
 
-```bash
-curl "http://localhost:4000/api/wallet/<SOLANA_ADDRESS>?forceLive=true&limit=50"
+curl "http://localhost:4000/api/wallet/<SOLANA_ADDRESS>?limit=50"
 ```
 
 ---
@@ -200,15 +199,13 @@ The project has been verified with:
 npm run build
 ```
 
-The live API has also been smoke-tested for:
-
 - frontend static serving;
-- health and RPC status;
-- preset and live wallet screening;
+- real wallet screening through Solana RPC;
 - DexScreener trending tokens;
 - PumpPortal live token feed;
-- token trader inspection;
-- Smart Money leaderboard;
+- SSE delivery of newly minted tokens;
+- token trader inspection and live wallet discovery;
+- empty-state behavior when no real leaderboard history is available;
 - browser tab navigation and live-feed rendering.
 
 ---

@@ -6,8 +6,13 @@ import { CONFIG } from './config.js';
 import { solanaRpc } from './solanaRpc.js';
 import { dexScreener } from './dexscreener.js';
 import { screenWallet } from './screener.js';
-import { SAMPLE_WALLETS } from './sampleWallets.js';
-import { parseTransaction } from './parser.js';
+import {
+  cacheWalletProfile,
+  getCachedWalletProfile,
+  getLiveWalletCandidates,
+  getLiveWalletStats,
+  registerLiveWallet
+} from './liveWallets.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -31,17 +36,23 @@ function initPumpPortalWs() {
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        if (data.txType === 'create') {
+        if (data.txType === 'create' && data.mint) {
           const item = {
             mint: data.mint,
             name: data.name || 'Unknown',
             symbol: data.symbol || 'PUMP',
-            traderPublicKey: data.traderPublicKey,
-            solAmount: data.solAmount || 0,
-            marketCapSol: data.marketCapSol || 28,
+            traderPublicKey: data.traderPublicKey || null,
+            solAmount: data.solAmount ?? null,
+            marketCapSol: data.marketCapSol ?? null,
             timestamp: Date.now(),
             timeAgo: 'Just now'
           };
+          if (item.traderPublicKey) {
+            registerLiveWallet(item.traderPublicKey, 'pumpportal-create', {
+              lastMint: item.mint,
+              lastMintAt: item.timestamp
+            });
+          }
           liveTokensBuffer.unshift(item);
           if (liveTokensBuffer.length > 60) liveTokensBuffer.pop();
           // Broadcast to connected SSE browsers
@@ -64,6 +75,12 @@ function initPumpPortalWs() {
 }
 initPumpPortalWs();
 
+function formatDuration(seconds = 0) {
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+  return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+}
+
 // 1. Health check & basic stats
 app.get('/api/health', async (req, res) => {
   try {
@@ -76,33 +93,30 @@ app.get('/api/health', async (req, res) => {
       solPriceUsd,
       wsConnected,
       liveTokensCount: liveTokensBuffer.length,
+      ...getLiveWalletStats(),
       timestamp: Date.now()
     });
   } catch (err) {
     res.status(500).json({ status: 'error', error: err.message });
   }
 });
+
 // 2. Real-time SOL price
 app.get('/api/sol-price', async (req, res) => {
   try {
-    const price = await dexScreener.getSolPriceUsd();
-    res.json({ solPriceUsd: price });
+    res.json({ solPriceUsd: await dexScreener.getSolPriceUsd() });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
-
-// 3. Screen a specific wallet address
+// 3. Screen a specific wallet from Solana Mainnet RPC
 app.get('/api/wallet/:address', async (req, res) => {
   const { address } = req.params;
   const limit = parseInt(req.query.limit || '40', 10);
-  const forceLive = req.query.forceLive === 'true';
-  const useSample = !forceLive && req.query.sample !== 'false';
 
   try {
     const result = await screenWallet(address, {
-      limit: Math.min(100, Math.max(10, limit)),
-      useSampleIfAvailable: useSample
+      limit: Math.min(100, Math.max(10, limit))
     });
     res.json(result);
   } catch (err) {
@@ -114,22 +128,7 @@ app.get('/api/wallet/:address', async (req, res) => {
   }
 });
 
-// 4. Sample wallets catalog
-app.get('/api/wallet-samples', (req, res) => {
-  const samples = Object.values(SAMPLE_WALLETS).map(w => ({
-    address: w.address,
-    alias: w.alias,
-    winRate: w.summary.winRate,
-    pnlSol: w.summary.totalRealizedPnlSol,
-    badges: w.badges,
-    smartScore: w.summary.smartScore,
-    safetyLevel: w.summary.safetyLevel,
-    tokensCount: w.summary.uniqueTokensTraded
-  }));
-  res.json(samples);
-});
-
-// 5. Trending pump.fun tokens
+// 4. Trending Pump.fun tokens from DexScreener
 app.get('/api/tokens/trending', async (req, res) => {
   const limit = parseInt(req.query.limit || '20', 10);
   try {
@@ -194,9 +193,14 @@ app.get('/api/token/:mint/traders', async (req, res) => {
 
     for (const tx of txs) {
       const parsed = parseTransaction(tx);
-      if (!parsed || !parsed.userWallet) continue;
+      if (!parsed || !parsed.userWallet || !['buy', 'sell'].includes(parsed.action)) continue;
 
       const wallet = parsed.userWallet;
+      registerLiveWallet(wallet, 'token-trader', {
+        lastToken: mint,
+        lastTradeAt: parsed.timestamp
+      });
+
       if (!traderMap.has(wallet)) {
         traderMap.set(wallet, {
           wallet,
@@ -228,77 +232,47 @@ app.get('/api/token/:mint/traders', async (req, res) => {
   }
 });
 
-// 8. Smart Money Leaderboard
-app.get('/api/leaderboard', (req, res) => {
-  // Return high-performing sample and tracked smart money wallets
-  const list = [
-    {
-      address: 'Cx32HntvCAZ7CAA9sdP5RHE8Y1NRPD4dMjp2Vu7RFB6h',
-      alias: 'Alpha Sniper / Smart Whale',
-      winRate: 72.2,
-      totalPnlSol: 38.45,
-      tradesCount: 42,
-      profitFactor: 3.42,
-      avgHoldTime: '7m 0s',
-      smartScore: 88,
-      archetype: 'Smart Money Whale',
-      primaryBadge: { label: 'Smart Money', color: 'emerald' },
-      isVerified: true
-    },
-    {
-      address: '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Pump',
-      alias: 'Fast Sniper Bot (Sub-10s)',
-      winRate: 75.0,
-      totalPnlSol: 22.15,
-      tradesCount: 128,
-      profitFactor: 2.85,
-      avgHoldTime: '45s',
-      smartScore: 82,
-      archetype: 'Sniper Bot',
-      primaryBadge: { label: 'Sub-10s Sniper', color: 'cyan' },
-      isVerified: true
-    },
-    {
-      address: 'AgmLJBMDCqWynYnQiPCuj9ewsNNsBJXyzoUhD9LJzN51',
-      alias: 'Meme Runner / Swing Whale',
-      winRate: 64.5,
-      totalPnlSol: 19.80,
-      tradesCount: 31,
-      profitFactor: 2.45,
-      avgHoldTime: '45m 12s',
-      smartScore: 78,
-      archetype: 'Swing Whale',
-      primaryBadge: { label: 'Diamond Hands', color: 'indigo' },
-      isVerified: false
-    },
-    {
-      address: '8EskVqiSKZvWoasMtUjUxc5j6SohjwEpCouArSjuhvND',
-      alias: 'GMGN Quick Scalper',
-      winRate: 68.2,
-      totalPnlSol: 14.30,
-      tradesCount: 88,
-      profitFactor: 2.10,
-      avgHoldTime: '2m 15s',
-      smartScore: 74,
-      archetype: 'Bot Scalper',
-      primaryBadge: { label: 'GMGN Router', color: 'purple' },
-      isVerified: false
-    },
-    {
-      address: '8Ww2nL7zX4qM9kP1vB6rT3yS5jH8dF2gA4cV1eN7pump',
-      alias: 'Serial Rugger / Dev Dumper ⚠️',
-      winRate: 85.7,
-      totalPnlSol: 18.90,
-      tradesCount: 35,
-      profitFactor: 8.50,
-      avgHoldTime: '25s',
-      smartScore: 15,
-      archetype: 'Dev Dumper',
-      primaryBadge: { label: 'Serial Rugger ⚠️', color: 'red' },
-      isVerified: false
-    }
-  ];
+// 8. Live Wallet Leaderboard
+app.get('/api/leaderboard', async (req, res) => {
+  const limit = Math.min(12, Math.max(1, parseInt(req.query.limit || '8', 10)));
+  const candidates = getLiveWalletCandidates(limit);
+  const list = [];
 
+  for (const candidate of candidates) {
+    try {
+      let profile = getCachedWalletProfile(candidate.address);
+      if (!profile) {
+        profile = await screenWallet(candidate.address, { limit: 30 });
+        cacheWalletProfile(candidate.address, profile);
+      }
+
+      if (!profile.summary || profile.summary.totalTrades === 0) continue;
+
+      const primaryBadge = profile.badges?.[0] || {
+        label: 'Observed Trader',
+        color: 'slate'
+      };
+
+      list.push({
+        address: profile.address,
+        alias: `Live ${profile.address.slice(0, 4)}...${profile.address.slice(-4)}`,
+        winRate: profile.summary.winRate,
+        totalPnlSol: profile.summary.totalRealizedPnlSol,
+        tradesCount: profile.summary.totalTrades,
+        profitFactor: profile.summary.profitFactor,
+        avgHoldTime: formatDuration(profile.summary.avgHoldDurationSec),
+        smartScore: profile.summary.smartScore,
+        archetype: profile.summary.safetyLevel,
+        primaryBadge,
+        source: candidate.source,
+        lastSeenAt: candidate.lastSeenAt
+      });
+    } catch (err) {
+      console.warn(`Unable to rank live wallet ${candidate.address}:`, err.message);
+    }
+  }
+
+  list.sort((a, b) => b.smartScore - a.smartScore || b.totalPnlSol - a.totalPnlSol);
   res.json(list);
 });
 

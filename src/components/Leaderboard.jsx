@@ -28,10 +28,10 @@ export default function Leaderboard({
         <div>
           <h2 className="text-lg font-bold text-white flex items-center gap-2">
             <Trophy className="w-5 h-5 text-yellow-400" />
-            <span>Smart Money & Whale Leaderboard</span>
+            <span>Live Wallet Leaderboard</span>
           </h2>
           <p className="text-xs text-slate-400">
-            Top ranked pump.fun meme coin wallets ranked by PnL and Win Rate
+            Ranked from wallets discovered through the live PumpPortal stream and on-chain trader scans
           </p>
         </div>
 
@@ -76,6 +76,13 @@ export default function Leaderboard({
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5 font-mono">
+              {sortedData.length === 0 && (
+                <tr>
+                  <td colSpan="7" className="py-12 text-center text-slate-400 font-sans">
+                    No live wallet history discovered yet. Open Live Mints or inspect a token's traders to populate this board.
+                  </td>
+                </tr>
+              )}
               {sortedData.map((item, index) => {
                 const isWatchlisted = watchlist.some(w => w.address === item.address);
                 return (

@@ -5,7 +5,7 @@ export default function Navigation({ activeTab, setActiveTab, watchlistCount = 0
   const tabs = [
     { id: 'screener', label: 'Wallet Screener', icon: Search },
     { id: 'trending', label: 'Trending Pump Coins', icon: Flame },
-    { id: 'leaderboard', label: 'Smart Money Leaderboard', icon: Trophy },
+    { id: 'leaderboard', label: 'Live Wallet Leaderboard', icon: Trophy },
     { id: 'watchlist', label: 'Watchlist', icon: Star, badge: watchlistCount > 0 ? watchlistCount : null },
     { id: 'settings', label: 'Settings & RPC', icon: Settings },
   ];

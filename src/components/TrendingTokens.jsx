@@ -11,30 +11,33 @@ export default function TrendingTokens({
   const [activeTab, setActiveTab] = useState('trending'); // 'trending' | 'live'
   const [copiedMint, setCopiedMint] = useState(null);
   const [liveMints, setLiveMints] = useState([]);
-  const [isLiveLoading, setIsLiveLoading] = useState(false);
 
-  // Poll live tokens buffer from backend when activeTab === 'live'
+  // Subscribe directly to the backend SSE bridge for live PumpPortal events.
   useEffect(() => {
-    let intervalId;
-    const fetchLiveMints = async () => {
+    if (activeTab !== 'live') return undefined;
+
+    setLiveMints([]);
+    const eventSource = new EventSource('/api/tokens/live-sse');
+    eventSource.onmessage = (event) => {
       try {
-        const res = await fetch('/api/tokens/live-feed');
-        const data = await res.json();
-        if (data && Array.isArray(data.tokens)) {
-          setLiveMints(data.tokens);
+        const payload = JSON.parse(event.data);
+        if (payload.type === 'init') {
+          setLiveMints(payload.tokens || []);
+          return;
+        }
+        if (payload.mint) {
+          setLiveMints((current) => [
+            payload,
+            ...current.filter((item) => item.mint !== payload.mint)
+          ].slice(0, 60));
         }
       } catch (err) {
-        console.warn('Error fetching live mints:', err);
+        console.warn('Invalid live mint event:', err);
       }
     };
 
-    if (activeTab === 'live') {
-      fetchLiveMints();
-      intervalId = setInterval(fetchLiveMints, 3000);
-    }
-
     return () => {
-      clearInterval(intervalId);
+      eventSource.close();
     };
   }, [activeTab]);
 
@@ -301,12 +304,12 @@ export default function TrendingTokens({
 
                       {/* Initial Buy */}
                       <td className="py-3.5 px-4 font-bold text-slate-200">
-                        {mint.solAmount ? `${mint.solAmount.toFixed(3)} SOL` : '0 SOL'}
+                        {mint.solAmount == null ? 'Unavailable' : `${mint.solAmount.toFixed(3)} SOL`}
                       </td>
 
                       {/* Market Cap */}
                       <td className="py-3.5 px-4 text-emerald-400 font-bold">
-                        {mint.marketCapSol ? `${mint.marketCapSol.toFixed(1)} SOL` : '~28 SOL'}
+                        {mint.marketCapSol == null ? 'Unavailable' : `${mint.marketCapSol.toFixed(1)} SOL`}
                       </td>
 
                       {/* Creator Dev */}

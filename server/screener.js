@@ -1,27 +1,15 @@
 import { solanaRpc } from './solanaRpc.js';
 import { parseTransaction } from './parser.js';
 import { dexScreener } from './dexscreener.js';
-import { SAMPLE_WALLETS } from './sampleWallets.js';
 
 export async function screenWallet(walletAddress, options = {}) {
-  const { limit = 60, useSampleIfAvailable = true } = options;
+  const { limit = 60 } = options;
 
   if (!walletAddress || typeof walletAddress !== 'string') {
     throw new Error('Invalid wallet address');
   }
 
   const cleanAddress = walletAddress.trim();
-
-  // Check if requested address is one of the curated sample wallets
-  if (useSampleIfAvailable && SAMPLE_WALLETS[cleanAddress]) {
-    const sample = JSON.parse(JSON.stringify(SAMPLE_WALLETS[cleanAddress]));
-    const solPriceUsd = await dexScreener.getSolPriceUsd();
-    sample.solPriceUsd = solPriceUsd;
-    sample.summary.totalRealizedPnlUsd = sample.summary.totalRealizedPnlSol * solPriceUsd;
-    sample.summary.totalUnrealizedPnlUsd = sample.summary.totalUnrealizedPnlSol * solPriceUsd;
-    sample.isSample = true;
-    return sample;
-  }
 
   // Basic validation of Solana base58 address
   if (cleanAddress.length < 32 || cleanAddress.length > 44) {
@@ -30,18 +18,19 @@ export async function screenWallet(walletAddress, options = {}) {
 
   const solPriceUsd = await dexScreener.getSolPriceUsd();
 
-  let solBalance = 0;
-  let signatures = [];
+  let solBalance;
+  let signatures;
   try {
-    const [bal, sigs] = await Promise.all([
-      solanaRpc.getAccountBalance(cleanAddress).catch(() => 0),
-      solanaRpc.getSignaturesForAddress(cleanAddress, limit).catch(() => [])
+    [solBalance, signatures] = await Promise.all([
+      solanaRpc.getAccountBalance(cleanAddress),
+      solanaRpc.getSignaturesForAddress(cleanAddress, limit)
     ]);
-    solBalance = bal;
-    signatures = sigs || [];
   } catch (err) {
-    console.warn(`RPC fetch error for ${cleanAddress}:`, err.message);
+    throw new Error(`Unable to read wallet from Solana RPC: ${err.message}`);
   }
+
+  signatures = signatures || [];
+
 
   if (signatures.length === 0) {
     // Return empty or new wallet state
@@ -50,7 +39,6 @@ export async function screenWallet(walletAddress, options = {}) {
       alias: 'New or Inactive Wallet',
       solBalance,
       solPriceUsd,
-      isSample: false,
       summary: {
         totalTrades: 0,
         uniqueTokensTraded: 0,
@@ -65,16 +53,14 @@ export async function screenWallet(walletAddress, options = {}) {
         profitFactor: 0,
         avgHoldDurationSec: 0,
         avgTradeSizeSol: 0,
-        smartScore: 50,
-        safetyLevel: 'NEUTRAL_NO_HISTORY',
+        smartScore: null,
+        safetyLevel: 'NO_HISTORY',
         tokensCreated: 0,
         rugPullsDetected: 0
       },
       badges: [
-        { id: 'fresh', label: 'Fresh Wallet', color: 'gray', icon: 'Sparkles', desc: 'No recent pump.fun transactions found' }
+        { id: 'no_history', label: 'No On-chain History', color: 'gray', icon: 'Sparkles', desc: 'No recent pump.fun transactions found for this wallet' }
       ],
-      tokensTraded: [],
-      recentTransactions: []
     };
   }
 
@@ -321,7 +307,6 @@ export async function screenWallet(walletAddress, options = {}) {
     alias: badges[0]?.label ? `${badges[0].label} (${cleanAddress.slice(0, 4)}...${cleanAddress.slice(-4)})` : 'Solana Trader',
     solBalance: parseFloat(solBalance.toFixed(3)),
     solPriceUsd,
-    isSample: false,
     summary: {
       totalTrades: parsedTxs.length,
       uniqueTokensTraded: tokenMap.size,
