@@ -81,6 +81,18 @@ function formatDuration(seconds = 0) {
   return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
 }
 
+function redactRpcUrl(url) {
+  try {
+    const parsed = new URL(url);
+    for (const key of ['api-key', 'api_key', 'apikey', 'apiKey', 'key', 'token']) {
+      if (parsed.searchParams.has(key)) parsed.searchParams.set(key, '••••••••');
+    }
+    return parsed.toString();
+  } catch {
+    return 'Custom RPC';
+  }
+}
+
 // 1. Health check & basic stats
 app.get('/api/health', async (req, res) => {
   try {
@@ -88,7 +100,7 @@ app.get('/api/health', async (req, res) => {
     res.json({
       status: 'ok',
       version: '1.0.0',
-      activeRpc: solanaRpc.getActiveRpc(),
+      activeRpc: redactRpcUrl(solanaRpc.getActiveRpc()),
       customRpcSet: !!solanaRpc.customRpc,
       solPriceUsd,
       wsConnected,
@@ -292,7 +304,7 @@ app.get('/api/settings/rpc', async (req, res) => {
   }
 
   res.json({
-    activeRpc,
+    activeRpc: redactRpcUrl(activeRpc),
     isCustom: !!solanaRpc.customRpc,
     latencyMs,
     status
@@ -303,22 +315,42 @@ app.post('/api/settings/rpc', async (req, res) => {
   const { rpcUrl } = req.body;
   if (!rpcUrl) {
     solanaRpc.setCustomRpc(null);
-    return res.json({ success: true, message: 'Reset to default RPC pool', activeRpc: solanaRpc.getActiveRpc() });
+    return res.json({
+      success: true,
+      message: 'Reset to default RPC pool',
+      activeRpc: redactRpcUrl(solanaRpc.getActiveRpc())
+    });
   }
 
-  const success = solanaRpc.setCustomRpc(rpcUrl);
-  if (!success) {
-    return res.status(400).json({ success: false, error: 'Invalid RPC URL format (must begin with http:// or https://)' });
+  const previousRpc = solanaRpc.customRpc;
+  if (!solanaRpc.setCustomRpc(rpcUrl)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid RPC URL format (must begin with http:// or https://)'
+    });
   }
 
-  // Test connection
   try {
     const start = Date.now();
     await solanaRpc.callRpc('getSlot', [], { timeoutMs: 6000 });
+    await solanaRpc.callRpc(
+      'getSignaturesForAddress',
+      ['11111111111111111111111111111111', { limit: 1 }],
+      { timeoutMs: 6000, useCache: false }
+    );
     const latency = Date.now() - start;
-    res.json({ success: true, activeRpc: solanaRpc.getActiveRpc(), latencyMs: latency });
+    return res.json({
+      success: true,
+      activeRpc: redactRpcUrl(solanaRpc.getActiveRpc()),
+      latencyMs: latency
+    });
   } catch (err) {
-    res.json({ success: true, warning: 'Custom RPC set, but ping test failed: ' + err.message, activeRpc: solanaRpc.getActiveRpc() });
+    solanaRpc.setCustomRpc(previousRpc);
+    return res.status(502).json({
+      success: false,
+      error: `RPC connected check failed: ${err.message}`,
+      activeRpc: redactRpcUrl(solanaRpc.getActiveRpc())
+    });
   }
 });
 

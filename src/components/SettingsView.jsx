@@ -7,7 +7,7 @@ export default function SettingsView({
   currency,
   setCurrency
 }) {
-  const [customUrl, setCustomUrl] = useState('');
+  const [customUrl, setCustomUrl] = useState(() => localStorage.getItem('pumpfun_rpc_url') || '');
   const [isTesting, setIsTesting] = useState(false);
   const [message, setMessage] = useState(null);
 
@@ -26,6 +26,7 @@ export default function SettingsView({
       setIsTesting(false);
 
       if (data.success) {
+        localStorage.setItem('pumpfun_rpc_url', customUrl.trim());
         setMessage({ type: 'success', text: data.message || `Connected! Latency: ${data.latencyMs || 'OK'}ms` });
         onUpdateRpc && onUpdateRpc();
       } else {
@@ -39,16 +40,20 @@ export default function SettingsView({
 
   const handleResetDefault = async () => {
     setCustomUrl('');
+    localStorage.removeItem('pumpfun_rpc_url');
     setIsTesting(true);
     try {
-      await fetch('/api/settings/rpc', {
+      const res = await fetch('/api/settings/rpc', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rpcUrl: null })
       });
+      const data = await res.json();
       setIsTesting(false);
-      setMessage({ type: 'success', text: 'Reset to default public Solana RPC pool' });
-      onUpdateRpc && onUpdateRpc();
+      setMessage(data.success
+        ? { type: 'success', text: 'Reset to default public Solana RPC pool' }
+        : { type: 'error', text: data.error || 'Failed to reset RPC' });
+      if (data.success) onUpdateRpc && onUpdateRpc();
     } catch (err) {
       setIsTesting(false);
       setMessage({ type: 'error', text: err.message });

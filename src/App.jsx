@@ -57,6 +57,19 @@ export default function App() {
   const fetchInitialData = async () => {
     setIsRefreshing(true);
     try {
+      const savedRpcUrl = localStorage.getItem('pumpfun_rpc_url');
+      if (savedRpcUrl) {
+        const currentRpc = await fetch('/api/settings/rpc').then(r => r.json()).catch(() => null);
+        if (currentRpc && !currentRpc.isCustom) {
+          const savedRpcResponse = await fetch('/api/settings/rpc', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rpcUrl: savedRpcUrl })
+          });
+          if (!savedRpcResponse.ok) localStorage.removeItem('pumpfun_rpc_url');
+        }
+      }
+
       const [healthRes, rpcRes, trendingRes] = await Promise.all([
         fetch('/api/health').then(r => r.json()).catch(() => null),
         fetch('/api/settings/rpc').then(r => r.json()).catch(() => null),
